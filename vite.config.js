@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 import contactHandler from "./api/contact.js";
+import turnstileConfigHandler from "./api/turnstile-config.js";
 
 function readBody(request) {
 	return new Promise((resolve, reject) => {
@@ -34,7 +35,13 @@ function contactApiDevPlugin() {
 		configureServer(server) {
 			server.middlewares.use(async (request, response, next) => {
 				const url = request.url?.split("?")[0];
-				if (url !== "/api/contact") {
+				const handler =
+					url === "/api/turnstile-config"
+						? turnstileConfigHandler
+						: url === "/api/contact"
+							? contactHandler
+							: null;
+				if (!handler) {
 					next();
 					return;
 				}
@@ -44,7 +51,7 @@ function contactApiDevPlugin() {
 					request.body = rawBody.length
 						? JSON.parse(rawBody.toString("utf8"))
 						: {};
-					await contactHandler(request, createVercelResponse(response));
+					await handler(request, createVercelResponse(response));
 				} catch {
 					if (!response.headersSent) {
 						response.statusCode = 500;
@@ -66,8 +73,12 @@ function contactApiDevPlugin() {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), "");
-	if (env.TURNSTILE_SECRET_KEY) {
-		process.env.TURNSTILE_SECRET_KEY = env.TURNSTILE_SECRET_KEY;
+	for (const key of [
+		"TURNSTILE_SECRET_KEY",
+		"TURNSTILE_SITE_KEY",
+		"VITE_TURNSTILE_SITE_KEY",
+	]) {
+		if (env[key]) process.env[key] = env[key];
 	}
 
 	return {
